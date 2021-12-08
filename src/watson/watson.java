@@ -17,15 +17,21 @@ import org.apache.lucene.index.DirectoryReader;
 import org.apache.lucene.index.IndexReader;
 import org.apache.lucene.index.IndexWriter;
 import org.apache.lucene.index.IndexWriterConfig;
+import org.apache.lucene.queryparser.classic.ParseException;
+import org.apache.lucene.queryparser.classic.QueryParser;
 import org.apache.lucene.search.IndexSearcher;
+import org.apache.lucene.search.Query;
+import org.apache.lucene.search.ScoreDoc;
+import org.apache.lucene.search.TopDocs;
 import org.apache.lucene.store.Directory;
 import org.apache.lucene.store.FSDirectory;
 import org.apache.lucene.store.RAMDirectory;
 
+
 public class watson {
 	
 	Directory index;
-	StandardAnalyzer analyzer;
+	static StandardAnalyzer analyzer;
 	IndexWriterConfig config;
 	static File indexFile;
 	static boolean indexExists=false;
@@ -128,15 +134,49 @@ public class watson {
 		} else {
 			Directory openIndex;
 			IndexReader reader;
-			IndexSearcher searcher;
+			IndexSearcher searcher = null;
+			Query q = null;
 			try {
 				openIndex = FSDirectory.open(indexFile.toPath());
 				reader = DirectoryReader.open(openIndex);
 				searcher = new IndexSearcher(reader);
+				
+				analyzer = new StandardAnalyzer();
+				//change to user query tomorrow.
+				String queryStr = "This woman who won consecutive heptathlons at the Olympics went to UCLA on a basketball scholarship";
+				try {
+					q = new QueryParser("text", analyzer).parse(queryStr);
+				} catch (ParseException e) {
+					// TODO Auto-generated catch block
+					e.printStackTrace();
+				}
+				
 			} catch (IOException e) {
 				// TODO Auto-generated catch block
 				e.printStackTrace();
 			}
+			int hitsPerPage = 10;
+	        TopDocs docs = null;
+			try {
+				docs = searcher.search(q, hitsPerPage);
+			} catch (IOException e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+			} //it is naturally sorted in descending order
+	        ScoreDoc[] hits = docs.scoreDocs; 
+	        for(int i=0;i<hits.length;++i) {
+	            int docId = hits[i].doc;
+	           
+	            Document d = null;
+				try {
+					d = searcher.doc(docId);
+				} catch (IOException e) {
+					// TODO Auto-generated catch block
+					e.printStackTrace();
+				}
+				
+	            System.out.println((i + 1) + ". " + hits[i].doc + "\t" + d.get("docid") + " Score: " + hits[i].score);
+	        }
 		}
 		
 		
