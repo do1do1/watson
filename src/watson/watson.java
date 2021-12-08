@@ -1,5 +1,7 @@
 package watson;
 
+//Author: Justin Do
+//Class: CSC483
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileReader;
