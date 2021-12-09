@@ -2,6 +2,15 @@ package watson;
 
 //Author: Justin Do
 //Class: CSC483
+//Description: This program creates indexes to be used to answer questions on Jeopardy
+//				It uses wikipedia pages to create these indexes by first look at the
+//				page title and then using the accompanying text to associate with it.
+//				These indexes when created can then be queried. This program uses
+//				Lucene and StanfordNLP to create the index and for some lemmatization.
+//				When this program is run, you will pick between 3 modes, and it will build
+//				an index if it isn't already built. If it is, it will run a simulation of
+//				being asked 100 questions on the index, the results in terms of MRR and P@1
+//				will be returned.
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileNotFoundException;
@@ -25,13 +34,16 @@ import org.apache.lucene.search.IndexSearcher;
 import org.apache.lucene.search.Query;
 import org.apache.lucene.search.ScoreDoc;
 import org.apache.lucene.search.TopDocs;
+import org.apache.lucene.search.similarities.ClassicSimilarity;
 import org.apache.lucene.store.Directory;
 import org.apache.lucene.store.FSDirectory;
 import org.apache.lucene.store.RAMDirectory;
+import org.tartarus.snowball.ext.PorterStemmer;
+
 
 import edu.stanford.nlp.pipeline.CoreDocument;
 import edu.stanford.nlp.pipeline.StanfordCoreNLP;
-import jdk.nashorn.internal.runtime.regexp.joni.Regex;
+
 
 
 public class watson {
@@ -48,6 +60,7 @@ public class watson {
 	}
 	
 	public void buildIndex() {
+		//open directory 
 		final File folder = new File("resources");
 		analyzer = new StandardAnalyzer();
         try {
@@ -56,7 +69,8 @@ public class watson {
 			// TODO Auto-generated catch block
 			e.printStackTrace();
 		}
-
+        //for all the files in resources, read them all and parse them to create document
+        //and the accompanying text
 		for (final File fileEntry : folder.listFiles()) {
 			File tempFile = new File("resources/" + fileEntry.getName());
 	        try {
@@ -71,7 +85,7 @@ public class watson {
 	            while ((helper = inputScanner.readLine()) != null) {
 	            	line.append(helper);
 	            	
-	            	if(line.length() != 0) {
+	            	if(line.length() != 0) { //documents
 	            		switch(line.charAt(0)) {
 		            		case '[':
 		            			if(line.length() >= 7) {
@@ -88,7 +102,7 @@ public class watson {
 		            			if(line.length() <= 1) {
 		            				break;
 		            			}
-		            			if(line.charAt(1) == '[') {
+		            			if(line.charAt(1) == '[') { //if it is a new doc, add the old one to the index and begin new
 		            				Document doc = new Document();
 			            			doc.add(new TextField("text", text.toString(),Field.Store.YES));
 			                    	doc.add(new StringField("docid", docID.toString(), Field.Store.YES));
@@ -102,7 +116,7 @@ public class watson {
 		            			
 		            			
 		                    	
-		            		case '=':
+		            		case '=': 
 		            			if(line.length() > 4) {
 		            				text.append(line.subSequence(2, line.length() - 2));
 		            			}
@@ -130,7 +144,94 @@ public class watson {
 	}
 	
 	public void buildIndexStem() {
-		
+		final File folder = new File("resources");
+		analyzer = new StandardAnalyzer();
+        try {
+			index = FSDirectory.open(indexFile.toPath());
+		} catch (IOException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+
+		for (final File fileEntry : folder.listFiles()) {
+			File tempFile = new File("resources/" + fileEntry.getName());
+	        try {
+	        	BufferedReader inputScanner = new BufferedReader(new FileReader(tempFile));
+	        	config = new IndexWriterConfig(analyzer);
+	        	IndexWriter w = new IndexWriter(index, config);
+	        	PorterStemmer stem = new PorterStemmer();
+	        	
+	        	StringBuilder line = new StringBuilder();
+	        	StringBuilder docID = new StringBuilder();
+	        	StringBuilder text = new StringBuilder();
+	        	String helper = "";
+	            while ((helper = inputScanner.readLine()) != null) {
+	            	line.append(helper);
+	            	
+	            	if(line.length() != 0) {
+	            		switch(line.charAt(0)) {
+		            		case '[': //document
+		            			if(line.length() >= 7) {
+		            				if(line.subSequence(0, 7).equals("[[File:")) {
+		            					break;
+			            				
+			            			}
+		            			} 
+		            			if(line.length() >= 8) {
+		            				if(line.subSequence(0, 8).equals("[[Image:")) {
+			            				break;
+			            			}
+		            			}
+		            			if(line.length() <= 1) {
+		            				break;
+		            			}
+		            			if(line.charAt(1) == '[') { //if it is a new doc, add the old one to the index and begin new
+		            				Document doc = new Document();
+			            			doc.add(new TextField("text", text.toString(),Field.Store.YES));
+			                    	doc.add(new StringField("docid", docID.toString(), Field.Store.YES));
+			                    	w.addDocument(doc);
+			                    	text.delete(0, text.length());
+			                    	docID.delete(0, docID.length());
+			                    	docID.append(line.subSequence(2, line.length()-2));
+			                    	System.out.println("New Doc ID: " + line.subSequence(2, line.length()-2));
+		            			}
+		            			
+		            			
+		            			
+		                    	
+		            		case '=':
+		            			if(line.length() > 4) {
+		            				//stem the line
+		            				stem.setCurrent(line.subSequence(2, line.length() - 2).toString());
+		            				stem.stem();
+		            				
+		            				
+		            				text.append(stem.getCurrent());
+		            			}
+		            			
+
+		            		default:
+		            			//stem the line
+		            			stem.setCurrent(line.toString());
+	            				stem.stem();
+		            			text.append(stem.getCurrent());
+		            	}
+	            		
+	            	}
+	            	line.delete(0, line.length());
+	            	
+	            }
+	            Document doc = new Document();
+				doc.add(new TextField("text", text.toString(),Field.Store.YES));
+	        	doc.add(new StringField("docid", docID.toString(), Field.Store.YES));
+	            inputScanner.close();
+	            w.close();
+	        } catch (IOException e) {
+	            e.printStackTrace();
+	        }
+	       
+
+	    }
 	}
 	
 	public void buildIndexLem() {
@@ -163,8 +264,8 @@ public class watson {
 	            	line.append(helper);
 	            	
 	            	if(line.length() != 0) {
-	            		switch(line.charAt(0)) {
-		            		case '[':
+	            		switch(line.charAt(0)) { 
+		            		case '[': //document
 		            			if(line.length() >= 7) {
 		            				if(line.subSequence(0, 7).equals("[[File:")) {
 		            					break;
@@ -179,11 +280,14 @@ public class watson {
 		            			if(line.length() <= 1) {
 		            				break;
 		            			}
-		            			if(line.charAt(1) == '[') {
+		            			if(line.charAt(1) == '[') { //if it is a new doc, add the old one to the index and begin new
+		            				
+		            				//use the gathered text and lemmatize it
 		            				document = pipeline.processToCoreDocument(text.toString());
 		            	        	pipeline.annotate(document);
-		            				Document doc = new Document();
-		            				
+		            	        	
+		            	        	//create document and add it to index
+		            				Document doc = new Document();	
 			            			doc.add(new TextField("text", document.text(),Field.Store.YES));
 			                    	doc.add(new StringField("docid", docID.toString(), Field.Store.YES));
 			                    	w.addDocument(doc);
@@ -280,18 +384,19 @@ public class watson {
 			}
 			double score = 0;
 			int precision1 = 0;
+			//read through the questions file
 			while(testFile.hasNextLine()) {
 				String line1 = testFile.nextLine(); //category, this will unfortunately go unused
 				String line2 = testFile.nextLine(); //query
 				String line3 = testFile.nextLine(); //answer
-				//line2.replaceAll("[^a-zA-Z0-9]", "");
-				//change to user query tomorrow.
+				//query the line in the file
 				try {
-					q = new QueryParser("text", analyzer).parse(QueryParser.escape(line1 + " " + line2));
+					q = new QueryParser("text", analyzer).parse(QueryParser.escape(line1 + " " + line2));			
 				} catch (ParseException e) {
 					// TODO Auto-generated catch block
 					e.printStackTrace();
 				}
+				//generate the top 10 results
 				int hitsPerPage = 10;
 		        TopDocs docs = null;
 				try {
@@ -299,9 +404,12 @@ public class watson {
 				} catch (IOException e) {
 					// TODO Auto-generated catch block
 					e.printStackTrace();
-				} //it is naturally sorted in descending order
-		        ScoreDoc[] hits = docs.scoreDocs; 
-		        for(int i=0;i<hits.length;++i) {
+				} 
+				//it is naturally sorted in descending order
+		        ScoreDoc[] hits = docs.scoreDocs;
+		        
+		        //look through the top 10 documents
+		        for(int i=0;i<hits.length;++i) { 
 		            int docId = hits[i].doc;
 		           
 		            Document d = null;
@@ -311,14 +419,17 @@ public class watson {
 						// TODO Auto-generated catch block
 						e.printStackTrace();
 					}
+					//if the doc that is pulled up is the same as what the answer is, add it to
+					//P@1 and MRR.
 					if(d.get("docid").equals(line3)) {
 						if(i == 0) {
-
+							
 							precision1 += 1;
 						}
 
 						score = score + (double) 1/(i+1);
-					}
+						break;
+					} 
 					
 		            
 		        }
@@ -328,6 +439,7 @@ public class watson {
 				}
 				
 			}
+			//print MRR and P@1
 			System.out.println("MRR: " + score/100 + " P@1: " + precision1);
 			
 		}
